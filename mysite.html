@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finnick Pham Portfolio</title>
+<meta name="description" content="Finnick Pham. Systems, robotics and agentic AI. Computing Science at Simon Fraser University, co-op engineer at Huawei Canada.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Layout: a live planning field as the hero (the one loud thing), then a quiet
+     two-column ledger: mono label on the left, content on the right.
+     One visual world, dark only, by choice. */
+  :root {
+    color-scheme: dark;
+    --bg: #090b0f;        /* blue-black field */
+    --ink: #eef0f4;       /* primary text, chosen trajectory */
+    --muted: #8c94a3;     /* secondary text */
+    --line: #222733;      /* hairlines, grid dots */
+    --hot: #ff6b1a;       /* accent: low-cost rollouts, goal */
+    --cold: #4a6096;      /* high-cost rollouts */
+    --font-display: "Archivo", "Arial Black", system-ui, sans-serif;
+    --font-body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+    --gutter: clamp(20px, 5vw, 56px);
+    --wide: 1180px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--hot); color: var(--bg); }
+
+  h1, h2, h3, p, ul, dl, dd { margin: 0; }
+  ul { padding: 0; list-style: none; }
+
+  a { color: inherit; text-decoration-color: var(--muted); text-underline-offset: 4px; transition: color 140ms, text-decoration-color 140ms; }
+  a:hover { color: var(--hot); text-decoration-color: var(--hot); }
+  a:focus-visible { outline: 2px solid var(--hot); outline-offset: 4px; }
+
+  .mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; line-height: 1.7; }
+  .muted { color: var(--muted); }
+
+  .display {
+    font-family: var(--font-display);
+    font-stretch: 125%;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    height: clamp(560px, 58vw, 740px);
+    border-bottom: 1px solid var(--line);
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--line) 1px, transparent 1.5px);
+    background-size: 40px 40px;
+    overflow: hidden;
+    cursor: crosshair;
+    touch-action: pan-y;
+  }
+  #field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .hero-layer {
+    position: absolute;
+    inset: 0;
+    max-width: calc(var(--wide) + 2 * var(--gutter));
+    margin: 0 auto;
+    padding: 20px var(--gutter) clamp(24px, 4vw, 44px);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+  .hero-layer a { pointer-events: auto; cursor: pointer; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .mark { font-size: 15px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .topbar nav ul { display: flex; gap: clamp(14px, 3vw, 28px); }
+  .topbar nav a { text-decoration: none; }
+
+  .hud {
+    position: absolute;
+    top: 72px;
+    right: var(--gutter);
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0 18px;
+    padding: 2px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud .live { grid-column: 1 / -1; color: var(--hot); display: flex; align-items: center; gap: 8px; }
+  .hud .live::before { content: ""; width: 7px; height: 7px; background: var(--hot); border-radius: 50%; animation: pulse 1.6s ease-in-out infinite; }
+  .hud dt { color: var(--muted); }
+  .hud dd { text-align: right; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+
+  .hero-foot { display: flex; }
+  .hero-id { display: flex; flex-direction: column; gap: clamp(14px, 2vw, 22px); }
+
+  h1 { font-size: clamp(44px, 12vw, 156px); line-height: 0.86; text-transform: uppercase; }
+  h1 span { display: inline-block; }
+
+  .lede { max-width: 30em; font-size: clamp(15px, 1.5vw, 18px); line-height: 1.5; }
+  .legend { position: absolute; right: var(--gutter); bottom: clamp(24px, 4vw, 44px); max-width: 27em; text-align: right; }
+  .hint { display: none; }
+
+  /* ---------- body sections ---------- */
+  main { max-width: calc(var(--wide) + 2 * var(--gutter)); margin: 0 auto; padding: 0 var(--gutter); }
+
+  .band {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 24px 40px;
+    padding: clamp(48px, 7vw, 88px) 0;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 12px;
+  }
+  .band > h2 { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 6px; }
+  .band > h2::before { content: ""; display: inline-block; width: 7px; height: 7px; background: var(--hot); margin-right: 10px; }
+
+  /* proof row */
+  .proof { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 32px; }
+  .proof li { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .proof .num { font-size: clamp(30px, 3.6vw, 46px); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .proof .num i { font-style: normal; color: var(--hot); }
+  .proof p { font-size: 15px; line-height: 1.45; color: var(--muted); }
+
+  /* entries */
+  .stack { display: flex; flex-direction: column; }
+  .entry { display: flex; flex-direction: column; gap: 14px; padding: 28px 0; border-top: 1px solid var(--line); }
+  .entry:first-child { border-top: 0; padding-top: 0; }
+  .entry:last-child { padding-bottom: 0; }
+
+  .entry-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 24px; }
+  .entry h3 { font-size: clamp(24px, 3.2vw, 38px); line-height: 1.1; }
+  .entry h3 a { text-decoration: none; display: inline-flex; align-items: baseline; gap: 0.35em; }
+  .entry h3 .arrow { font-family: var(--font-mono); font-size: 0.5em; font-weight: 400; color: var(--muted); transition: transform 160ms, color 160ms; }
+  .entry h3 a:hover .arrow { transform: translate(4px, -4px); color: var(--hot); }
+
+  .points { display: flex; flex-direction: column; gap: 8px; max-width: 44em; }
+  .points li { position: relative; padding-left: 20px; }
+  .points li::before { content: ""; position: absolute; left: 0; top: 0.68em; width: 8px; height: 1px; background: var(--muted); }
+  .points b { font-weight: 600; color: var(--ink); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tags li { font-family: var(--font-mono); font-size: 11px; line-height: 1; padding: 6px 9px; border: 1px solid var(--line); color: var(--muted); }
+
+  dl.skills { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 14px 32px; }
+  dl.skills dt { color: var(--muted); padding-top: 4px; }
+
+  .rows { display: flex; flex-direction: column; }
+  .rows li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 24px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .rows li:first-child { border-top: 0; padding-top: 0; }
+
+  /* contact */
+  .contact { display: flex; flex-direction: column; gap: 22px; }
+  .contact .big { font-size: clamp(19px, 5vw, 54px); line-height: 1.1; text-decoration: none; overflow-wrap: anywhere; }
+  .contact ul { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+
+  footer { max-width: calc(var(--wide) + 2 * var(--gutter)); margin: 0 auto; padding: 28px var(--gutter) 40px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }
+
+  @media (max-width: 860px) {
+    .band { grid-template-columns: 1fr; }
+    .proof { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .legend { display: none; }
+    .hint { display: block; }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .hud { top: 64px; }
+    .hud .opt { display: none; }
+    dl.skills { grid-template-columns: 1fr; gap: 2px; }
+    dl.skills dd { margin-bottom: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .hud .live::before { animation: none; }
+    .entry h3 .arrow, a { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero" id="hero">
+  <canvas id="field" aria-hidden="true"></canvas>
+
+  <div class="hero-layer">
+    <div class="topbar">
+      <span class="mark display">F. Pham</span>
+      <nav class="mono" aria-label="Sections">
+        <ul>
+          <li><a href="#work">work</a></li>
+          <li><a href="#projects">projects</a></li>
+          <li><a href="#contact">contact</a></li>
+        </ul>
+      </nav>
+    </div>
+
+    <dl class="hud mono" data-obstacle aria-hidden="true">
+      <div class="live">MPPI, live</div>
+      <dt>rollouts</dt><dd id="hud-k">120</dd>
+      <dt>horizon</dt><dd id="hud-t">26 steps</dd>
+      <dt>solve</dt><dd id="hud-ms">0.00 ms</dd>
+      <dt class="opt">A* route</dt><dd class="opt" id="hud-path">0 cells</dd>
+    </dl>
+
+    <div class="hero-foot">
+      <div class="hero-id">
+        <h1 class="display"><span data-obstacle>Finnick</span><br><span data-obstacle>Pham</span></h1>
+        <p class="lede" data-obstacle>Systems, robotics and agentic AI. Computing Science at Simon Fraser, and co-op engineer at Huawei Canada working on AI agents that improve themselves.</p>
+        <p class="hint mono muted" data-obstacle>Tap anywhere to set a goal for the planner.</p>
+      </div>
+      <p class="legend mono muted" data-obstacle>Move your cursor to set a goal. A* finds the route, then MPPI samples 120 possible futures every frame and steers. Orange futures cost least. It is the planner pairing I ran on a robot at SFU.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="band" aria-labelledby="h-proof">
+    <h2 id="h-proof">Measured</h2>
+    <ul class="proof">
+      <li>
+        <span class="num display">50<i>&rarr;</i>92%</span>
+        <p>Agent task success on held-out tasks after Wallace RSI, my self-improvement algorithm at Huawei Canada.</p>
+      </li>
+      <li>
+        <span class="num display">7<i>&times;</i></span>
+        <p>Fewer cloud model input tokens, 0.49M down to 0.07M over 120 episodes.</p>
+      </li>
+      <li>
+        <span class="num display">12.5<i>&times;</i></span>
+        <p>Faster MPPI control loop, 2,500 ms down to 200 ms, with JAX on CUDA.</p>
+      </li>
+      <li>
+        <span class="num display">10,006</span>
+        <p>Simultaneous clients on Incognitalk, an encrypted chat server written in C.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="band" id="work" aria-labelledby="h-work">
+    <h2 id="h-work">Work</h2>
+    <div class="stack">
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display">Huawei Canada</h3>
+          <span class="mono muted">Sep 2026 to present</span>
+        </div>
+        <p class="mono muted">Co-op Engineer, DDSM Lab. Markham, ON</p>
+        <ul class="points">
+          <li>Research recursive self-improvement systems for agentic AI on the open-source OpenJiuwen platform.</li>
+          <li>Developed Wallace RSI, a hierarchical algorithm that recursively optimizes agent harnesses and scales in parallel. Task success on held-out tasks rose <b>from 50% to 92%</b>, and cloud model input tokens fell <b>7x</b> over 120 episodes.</li>
+          <li>Architected multiprocess inference infrastructure with a parallel pool of rootless Docker sandboxes, cutting end-to-end latency <b>3x</b> in simulations.</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display">SFU Robotics Lab</h3>
+          <span class="mono muted">May 2026 to Oct 2026</span>
+        </div>
+        <p class="mono muted">Research Assistant. Burnaby, BC</p>
+        <ul class="points">
+          <li>Connected semi-semantic 3D point-cloud perception to a VLA-policy control module over ROS 2, giving an end-to-end pipeline driven by natural language.</li>
+          <li>Integrated A* global planning with MPPI local control in ROS 2 for dynamic obstacle avoidance.</li>
+          <li>Cut MPPI control-loop latency <b>from 2,500 ms to 200 ms</b> by vectorizing trajectory rollouts in JAX on NVIDIA CUDA.</li>
+          <li>Raised URDF pose publishing <b>from under 0.4 Hz to a stable 5 Hz</b> by making a sequential point-cloud pipeline multithreaded and fixing live-lock issues.</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="band" id="projects" aria-labelledby="h-projects">
+    <h2 id="h-projects">Projects</h2>
+    <div class="stack">
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display"><a href="https://github.com/codernhi123/Incognitalk">Incognitalk <span class="arrow" aria-hidden="true">&nearr;</span></a></h3>
+          <span class="mono muted">Encrypted group chat</span>
+        </div>
+        <ul class="points">
+          <li>High-throughput encrypted messaging in C that passed the C10K mark with <b>10,006 simultaneous clients</b>.</li>
+          <li>End-to-end encryption: ephemeral RSA session-key exchange for the handshake, AES-256 for messages.</li>
+          <li>epoll-based relay server with a dynamically sized POSIX thread pool and a custom binary protocol.</li>
+        </ul>
+        <ul class="tags" aria-label="Tech used"><li>C</li><li>OpenSSL</li><li>pthread</li><li>epoll</li><li>websocket</li></ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display"><a href="https://github.com/mbuiiiz/Synthesize">Synthesize <span class="arrow" aria-hidden="true">&nearr;</span></a></h3>
+          <span class="mono muted">Semantic search backend</span>
+        </div>
+        <ul class="points">
+          <li>Backend for a collaborative browser extension that collects, organizes and queries web knowledge.</li>
+          <li>Asynchronous document ingestion and embedding pipelines with work queues and thread pools, decoupled from API requests.</li>
+        </ul>
+        <ul class="tags" aria-label="Tech used"><li>Python</li><li>asyncio</li><li>multiprocessing</li><li>pgvector</li><li>Docker</li></ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display"><a href="https://github.com/codernhi123/Daily-Mini-Games-Service">Mini Games System <span class="arrow" aria-hidden="true">&nearr;</span></a></h3>
+          <span class="mono muted">Full-stack game service</span>
+        </div>
+        <ul class="points">
+          <li>Python backend for friendship management and real-time leaderboards with FastAPI and MySQL, containerized with Docker.</li>
+        </ul>
+        <ul class="tags" aria-label="Tech used"><li>Python</li><li>FastAPI</li><li>SQLAlchemy</li><li>asyncio</li><li>Docker</li></ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry-head">
+          <h3 class="display"><a href="https://github.com/codernhi123/Nomo">Nomo <span class="arrow" aria-hidden="true">&nearr;</span></a></h3>
+          <span class="mono muted">Computer vision</span>
+        </div>
+        <ul class="points">
+          <li>Replaces the mouse with pupil tracking.</li>
+        </ul>
+        <ul class="tags" aria-label="Tech used"><li>Python</li></ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="h-edu">
+    <h2 id="h-edu">Record</h2>
+    <ul class="rows">
+      <li><span>BSc Computing Science, Simon Fraser University</span><span class="mono muted">2024 to 2029</span></li>
+      <li><span>CGPA 4.00 / 4.33, President's Honour Roll</span><span class="mono muted">SFU</span></li>
+      <li><span>Bronze medal, ICPC Pacific Northwest Regional, Division 1. 3rd at the BC site</span><span class="mono muted">2025, C++20</span></li>
+    </ul>
+  </section>
+
+  <section class="band" aria-labelledby="h-skills">
+    <h2 id="h-skills">Toolbox</h2>
+    <dl class="skills">
+      <dt class="mono">languages</dt><dd>C/C++, Python, SQL, Bash, x86 Assembly</dd>
+      <dt class="mono">systems</dt><dd>Linux, multithreading, multiprocessing, TCP/IP, IPC, epoll, system calls</dd>
+      <dt class="mono">tools</dt><dd>Docker, Git, CMake, PostgreSQL, SQLite, pgvector, pixi, uv</dd>
+      <dt class="mono">libraries</dt><dd>ROS 2, JAX, NumPy, OpenCV, FastAPI, gRPC, OpenSSL, C++ STL</dd>
+    </dl>
+  </section>
+
+  <section class="band" id="contact" aria-labelledby="h-contact" style="border-bottom:0">
+    <h2 id="h-contact">Contact</h2>
+    <div class="contact">
+      <a class="big display" href="mailto:pvhuy060606@gmail.com">pvhuy060606@gmail.com</a>
+      <ul class="mono">
+        <li><a href="https://www.linkedin.com/in/finnick-pham/">linkedin.com/in/finnick-pham</a></li>
+        <li><a href="https://github.com/codernhi123">github.com/codernhi123</a></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="mono muted">
+  <span>&copy; 2026 Finnick Pham</span>
+  <span>The hero runs a real A* and MPPI planner in your browser.</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var hero = document.getElementById('hero');
+  var canvas = document.getElementById('field');
+  if (!hero || !canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- planner constants ---- */
+  var K = 120;          // sampled rollouts per frame
+  var T = 26;           // horizon steps
+  var DT = 0.05;        // seconds per horizon step
+  var VMAX = 360;       // px / s
+  var SIGMA = 105;      // velocity-command noise, px / s per axis
+  var RHO = 0.86;       // noise correlation along a rollout, keeps arcs smooth
+  var TAU = 0.12;       // seconds for the drive to reach a commanded velocity
+  var ARRIVE = 130;     // start braking this far from the goal
+  var R = 10;           // robot radius
+  var CELL = 20;        // A* grid cell
+  var PAD = 8;          // padding around text obstacles
+  var HORIZON = T * DT * VMAX;
+  var EXPLORE_FROM = Math.round(K * 0.68);
+  var noiseScale = new Float32Array(K);
+  for (var ns = 0; ns < K; ns++) {
+    if (ns === 0) noiseScale[ns] = 0;                                   // the plan as it stands
+    else if (ns < 16) noiseScale[ns] = 0.25;                            // fine adjustments, for tight gaps
+    else if (ns < EXPLORE_FROM) noiseScale[ns] = 1;
+    else noiseScale[ns] = ns < EXPLORE_FROM + 10 ? 0.15 : 1.5;          // fresh starts toward the target
+  }
+
+  /* ---- colors from the page tokens ---- */
+  var css = getComputedStyle(document.documentElement);
+  function token(name, fallback) { var v = css.getPropertyValue(name).trim(); return v || fallback; }
+  function rgb(hex) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  var INK = token('--ink', '#eef0f4');
+  var MUTED = token('--muted', '#8c94a3');
+  var HOT = token('--hot', '#ff6b1a');
+  var hotRgb = rgb(HOT), coldRgb = rgb(token('--cold', '#4a6096'));
+  var PAL = 24, palette = [];
+  for (var p = 0; p < PAL; p++) {
+    var q = p / (PAL - 1);
+    palette.push('rgb(' +
+      Math.round(coldRgb[0] + (hotRgb[0] - coldRgb[0]) * q) + ',' +
+      Math.round(coldRgb[1] + (hotRgb[1] - coldRgb[1]) * q) + ',' +
+      Math.round(coldRgb[2] + (hotRgb[2] - coldRgb[2]) * q) + ')');
+  }
+
+  /* ---- state ---- */
+  var W = 0, H = 0, dpr = 1;
+  var rects = [], circles = [];
+  var robot = { x: 0, y: 0, th: 0, vx: 0, vy: 0, placed: false };   // omni-drive: it can move in any direction
+  var goal = { x: 0, y: 0 };
+  var target = { x: 0, y: 0, set: false };
+  var pointerInside = false, lastPointer = -1e9, holdUntil = -1e9, wanderAt = -1e9;
+  var path = [], routeCells = 0, trail = [];
+  var Ux = new Float32Array(T), Uy = new Float32Array(T);            // the current plan: one velocity command per step
+  var epsX = new Float32Array(K * T), epsY = new Float32Array(K * T);
+  var costs = new Float32Array(K);
+  var weights = new Float32Array(K);
+  var hitAt = new Uint8Array(K);
+  var trajX = new Float32Array(K * (T + 1)), trajY = new Float32Array(K * (T + 1));
+  var nomX = new Float32Array(T + 1), nomY = new Float32Array(T + 1), nomN = 0;
+  var order = new Uint16Array(K);
+  for (var o = 0; o < K; o++) order[o] = o;
+  var shiftAcc = 0, frameNo = 0, solveMs = 0, blockedAhead = false;
+
+  var cols = 0, rows = 0, blocked, gScore, fScore, came, closed, inOpen, seen;
+
+  var hudMs = document.getElementById('hud-ms');
+  var hudPath = document.getElementById('hud-path');
+
+  /* ---- geometry ---- */
+  function rectDist(px, py, r) {
+    var dx = Math.max(r.x0 - px, 0, px - r.x1), dy = Math.max(r.y0 - py, 0, py - r.y1);
+    if (dx > 0 || dy > 0) return Math.sqrt(dx * dx + dy * dy);
+    return -Math.min(px - r.x0, r.x1 - px, py - r.y0, r.y1 - py);
+  }
+  // distance to the nearest obstacle or wall, with moving obstacles predicted t seconds ahead
+  function clearance(px, py, t) {
+    var d = Math.min(px, W - px, py, H - py), i, c, e;
+    for (i = 0; i < rects.length; i++) { e = rectDist(px, py, rects[i]); if (e < d) d = e; }
+    for (i = 0; i < circles.length; i++) {
+      c = circles[i];
+      var cx = c.x + c.vx * t, cy = c.y + c.vy * t;
+      e = Math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy)) - c.r;
+      if (e < d) d = e;
+    }
+    return d;
+  }
+  function clearLine(ax, ay, bx, by, margin) {
+    var d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / 10));
+    for (var i = 1; i <= n; i++) {
+      var f = i / n;
+      if (clearance(ax + (bx - ax) * f, ay + (by - ay) * f, 0) < margin) return false;
+    }
+    return true;
+  }
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function gauss() {
+    var u = 1 - Math.random(), v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.283185307 * v);
+  }
+  function freePoint(margin, awayFrom, minDist) {
+    for (var i = 0; i < 60; i++) {
+      var x = rand(margin, W - margin), y = rand(margin, H - margin);
+      if (clearance(x, y, 0) < margin) continue;
+      if (awayFrom && Math.hypot(x - awayFrom.x, y - awayFrom.y) < minDist) continue;
+      return { x: x, y: y };
+    }
+    return null;
+  }
+
+  /* ---- layout ---- */
+  function measure() {
+    var hr = hero.getBoundingClientRect();
+    var w = Math.round(hr.width), h = Math.round(hr.height);
+    if (!w || !h) return;
+    var sizeChanged = w !== W || h !== H;
+    var ratio = Math.min(2, window.devicePixelRatio || 1);
+    if (sizeChanged || ratio !== dpr) {            // resizing a canvas clears it, so only when needed
+      W = w; H = h; dpr = ratio;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+    }
+
+    rects = [];
+    Array.prototype.forEach.call(hero.querySelectorAll('[data-obstacle]'), function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      rects.push({ x0: r.left - hr.left - PAD, y0: r.top - hr.top - PAD, x1: r.right - hr.left + PAD, y1: r.bottom - hr.top + PAD });
+    });
+
+    var n = Math.ceil(W / CELL) * Math.ceil(H / CELL);
+    if (sizeChanged || !blocked) {
+      cols = Math.ceil(W / CELL); rows = Math.ceil(H / CELL);
+      blocked = new Uint8Array(n); closed = new Uint8Array(n); inOpen = new Uint8Array(n); seen = new Uint8Array(n);
+      gScore = new Float32Array(n); fScore = new Float32Array(n); came = new Int32Array(n);
+      path = [];
+    }
+
+    if (sizeChanged || !circles.length) {
+      circles = [];
+      var count = Math.max(3, Math.min(5, Math.round(W * H / 170000)));
+      var base = Math.min(W, H);
+      for (var i = 0; i < count; i++) {
+        var r = rand(0.025, 0.045) * base + 6;
+        var pt = freePoint(r + 14) || { x: W * 0.6, y: H * 0.3 };
+        var a = rand(0, 6.283), s = rand(12, 28);
+        circles.push({ x: pt.x, y: pt.y, r: r, vx: Math.cos(a) * s, vy: Math.sin(a) * s });
+      }
+    }
+    if (!robot.placed || clearance(robot.x, robot.y, 0) < R) {
+      var start = freePoint(36) || { x: W * 0.5, y: H * 0.25 };
+      robot.x = start.x; robot.y = start.y; robot.th = rand(0, 6.283); robot.vx = 0; robot.vy = 0; robot.placed = true;
+      trail = []; target.set = false;
+    }
+    if (!goal.x && !goal.y) { goal.x = robot.x; goal.y = robot.y; }
+  }
+
+  /* ---- A* on a coarse grid, then pulled straight where there is line of sight ---- */
+  function cellOf(x, y) {
+    var cx = Math.max(0, Math.min(cols - 1, (x / CELL) | 0));
+    var cy = Math.max(0, Math.min(rows - 1, (y / CELL) | 0));
+    return cy * cols + cx;
+  }
+  function nearestFree(c) {
+    if (!blocked[c]) return c;
+    seen.fill(0);
+    var queue = [c], head = 0; seen[c] = 1;
+    while (head < queue.length) {
+      var cur = queue[head++], cx = cur % cols, cy = (cur / cols) | 0;
+      var nb = [cx > 0 ? cur - 1 : -1, cx < cols - 1 ? cur + 1 : -1, cy > 0 ? cur - cols : -1, cy < rows - 1 ? cur + cols : -1];
+      for (var i = 0; i < 4; i++) {
+        var n = nb[i];
+        if (n < 0 || seen[n]) continue;
+        if (!blocked[n]) return n;
+        seen[n] = 1; queue.push(n);
+      }
+    }
+    return -1;
+  }
+  function heuristic(a, b) {
+    var dx = Math.abs(a % cols - b % cols), dy = Math.abs(((a / cols) | 0) - ((b / cols) | 0));
+    return Math.max(dx, dy) + 0.4142 * Math.min(dx, dy);
+  }
+  function plan() {
+    // open ground: no search needed
+    if (clearLine(robot.x, robot.y, goal.x, goal.y, R + 7)) {
+      routeCells = 0;
+      return [{ x: robot.x, y: robot.y }, { x: goal.x, y: goal.y }];
+    }
+    var i, n = cols * rows;
+    for (i = 0; i < n; i++) {
+      blocked[i] = clearance((i % cols + 0.5) * CELL, (((i / cols) | 0) + 0.5) * CELL, 0) < R + 7 ? 1 : 0;
+    }
+    var goalCell = cellOf(goal.x, goal.y);
+    var s = nearestFree(cellOf(robot.x, robot.y)), g = nearestFree(goalCell);
+    if (s < 0 || g < 0) return [];
+    gScore.fill(Infinity); came.fill(-1); closed.fill(0); inOpen.fill(0);
+    var open = [s]; gScore[s] = 0; fScore[s] = heuristic(s, g); inOpen[s] = 1;
+    var found = s === g;
+    while (open.length && !found) {
+      var bi = 0;
+      for (i = 1; i < open.length; i++) if (fScore[open[i]] < fScore[open[bi]]) bi = i;
+      var cur = open[bi]; open[bi] = open[open.length - 1]; open.pop(); inOpen[cur] = 0;
+      if (cur === g) { found = true; break; }
+      closed[cur] = 1;
+      var cx = cur % cols, cy = (cur / cols) | 0;
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        var nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        var nb = ny * cols + nx;
+        if (blocked[nb] || closed[nb]) continue;
+        if (dx && dy && (blocked[cy * cols + nx] || blocked[ny * cols + cx])) continue;
+        var ng = gScore[cur] + (dx && dy ? 1.4142 : 1);
+        if (ng < gScore[nb]) {
+          came[nb] = cur; gScore[nb] = ng; fScore[nb] = ng + heuristic(nb, g);
+          if (!inOpen[nb]) { open.push(nb); inOpen[nb] = 1; }
+        }
+      }
+    }
+    if (!found) return [];
+    var out = [], c = g, guard = 0;
+    while (c !== -1 && guard++ < n) {
+      out.push({ x: (c % cols + 0.5) * CELL, y: (((c / cols) | 0) + 0.5) * CELL });
+      if (c === s) break;
+      c = came[c];
+    }
+    out.reverse();
+    routeCells = out.length;
+    out[0] = { x: robot.x, y: robot.y };
+    if (g === goalCell && out.length > 1) out[out.length - 1] = { x: goal.x, y: goal.y };
+    else if (g === goalCell) out.push({ x: goal.x, y: goal.y });
+
+    // drop grid zig-zags: jump to the farthest node still in line of sight
+    var pulled = [out[0]], a = 0;
+    while (a < out.length - 1) {
+      var b = Math.min(out.length - 1, a + 45);
+      while (b > a + 1 && !clearLine(out[a].x, out[a].y, out[b].x, out[b].y, R + 5)) b--;
+      pulled.push(out[b]); a = b;
+    }
+    return pulled;
+  }
+  function pathLength() {
+    var len = 0;
+    for (var i = 1; i < path.length; i++) len += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    return len;
+  }
+  function pointAlong(dist) {
+    for (var i = 1; i < path.length; i++) {
+      var seg = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+      if (seg >= dist && seg > 0) {
+        var f = dist / seg;
+        return { x: path[i - 1].x + (path[i].x - path[i - 1].x) * f, y: path[i - 1].y + (path[i].y - path[i - 1].y) * f };
+      }
+      dist -= seg;
+    }
+    return path.length ? path[path.length - 1] : { x: goal.x, y: goal.y };
+  }
+
+  /* ---- MPPI: sample K futures, weight by cost, steer ---- */
+  // braking law shared by the robot and its sampled futures, so they stop at the goal instead of overshooting
+  function arriveSpeed(x, y, gx, gy) {
+    var cap = VMAX * Math.sqrt((x - gx) * (x - gx) + (y - gy) * (y - gy)) / ARRIVE;
+    return cap > VMAX ? VMAX : cap;
+  }
+  function mppi(nearGoal) {
+    var k, t, tx = target.x, ty = target.y, gx = goal.x, gy = goal.y;
+    var sq = Math.sqrt(1 - RHO * RHO) * SIGMA, lag = Math.min(1, DT / TAU);
+    var smin = Infinity, ssum = 0;
+    for (k = 0; k < K; k++) {
+      var ex = 0, ey = 0, x = robot.x, y = robot.y, vx = robot.vx, vy = robot.vy;
+      var cost = 0, hit = T, base = k * (T + 1), explore = k >= EXPLORE_FROM, scale = noiseScale[k];
+      trajX[base] = x; trajY[base] = y;
+      for (t = 0; t < T; t++) {
+        if (k > 0) { ex = RHO * ex + sq * gauss(); ey = RHO * ey + sq * gauss(); }
+        var cap = nearGoal ? arriveSpeed(x, y, gx, gy) : VMAX;
+        var ux, uy, m;
+        if (explore) {
+          // a third of the samples ignore the current plan and head for the target
+          var ddx = tx - x, ddy = ty - y, dd = Math.sqrt(ddx * ddx + ddy * ddy) + 1e-6;
+          var go = Math.min(cap, VMAX * dd / 60);
+          ux = ddx / dd * go + ex * scale; uy = ddy / dd * go + ey * scale;
+        } else { ux = Ux[t] + ex * scale; uy = Uy[t] + ey * scale; }
+        m = Math.sqrt(ux * ux + uy * uy);
+        if (m > cap) { ux *= cap / m; uy *= cap / m; }
+        epsX[k * T + t] = ux - Ux[t]; epsY[k * T + t] = uy - Uy[t];
+        vx += (ux - vx) * lag; vy += (uy - vy) * lag;
+        x += vx * DT; y += vy * DT;
+        trajX[base + t + 1] = x; trajY[base + t + 1] = y;
+        var d = clearance(x, y, (t + 1) * DT);
+        if (d < R) { cost += 4000; if (hit === T) hit = t + 1; }
+        else cost += 30 * Math.exp(-(d - R) / 10);
+        cost += 0.03 * Math.sqrt((x - tx) * (x - tx) + (y - ty) * (y - ty));
+      }
+      cost += 6 * Math.sqrt((x - tx) * (x - tx) + (y - ty) * (y - ty));
+      costs[k] = cost; hitAt[k] = hit;
+      if (cost < smin) smin = cost;
+      ssum += cost;
+    }
+    var spread = ssum / K - smin + 1e-6, wsum = 0;
+    for (k = 0; k < K; k++) { weights[k] = Math.exp(-3.5 * (costs[k] - smin) / spread); wsum += weights[k]; }
+    for (t = 0; t < T; t++) {
+      var dux = 0, duy = 0;
+      for (k = 0; k < K; k++) { dux += weights[k] * epsX[k * T + t]; duy += weights[k] * epsY[k * T + t]; }
+      Ux[t] += dux / wsum; Uy[t] += duy / wsum;
+    }
+    // the chosen plan, for drawing
+    var nx = robot.x, ny = robot.y, nvx = robot.vx, nvy = robot.vy;
+    nomX[0] = nx; nomY[0] = ny; nomN = T;
+    for (t = 0; t < T; t++) {
+      nvx += (Ux[t] - nvx) * lag; nvy += (Uy[t] - nvy) * lag;
+      nx += nvx * DT; ny += nvy * DT;
+      nomX[t + 1] = nx; nomY[t + 1] = ny;
+      if (nomN === T && clearance(nx, ny, (t + 1) * DT) < R) nomN = t + 1;
+    }
+    blockedAhead = nomN <= 6;                        // the plan itself hits something within 0.3 s
+  }
+
+  /* ---- simulation step ---- */
+  function step(dt, now) {
+    var i, c, j;
+    for (i = 0; i < circles.length; i++) {
+      c = circles[i];
+      c.x += c.vx * dt; c.y += c.vy * dt;
+      if (c.x < c.r && c.vx < 0) c.vx = -c.vx;
+      if (c.x > W - c.r && c.vx > 0) c.vx = -c.vx;
+      if (c.y < c.r && c.vy < 0) c.vy = -c.vy;
+      if (c.y > H - c.r && c.vy > 0) c.vy = -c.vy;
+      for (j = 0; j < rects.length; j++) {
+        if (rectDist(c.x, c.y, rects[j]) < c.r + 2) {
+          var rc = rects[j], mx = (rc.x0 + rc.x1) / 2, my = (rc.y0 + rc.y1) / 2;
+          var ox = (c.x - mx) / (rc.x1 - rc.x0), oy = (c.y - my) / (rc.y1 - rc.y0);
+          if (Math.abs(ox) > Math.abs(oy)) c.vx = Math.abs(c.vx) * (ox > 0 ? 1 : -1);
+          else c.vy = Math.abs(c.vy) * (oy > 0 ? 1 : -1);
+        }
+      }
+    }
+
+    // The cursor owns the goal for as long as it is over the field.
+    // Only when nobody is steering does the robot wander on its own.
+    var steering = (pointerInside && now - lastPointer < 20000) || now < holdUntil;
+    if (!steering) {
+      var reached = Math.hypot(robot.x - goal.x, robot.y - goal.y) < 28;
+      if (reached || now - wanderAt > 7000 || clearance(goal.x, goal.y, 0) < R) {
+        var next = freePoint(34, robot, Math.min(W, H) * 0.35) || freePoint(24);
+        if (next) { goal.x = next.x; goal.y = next.y; }
+        wanderAt = now;
+      }
+    }
+
+    var t0 = performance.now();
+    if (frameNo % 3 === 0 || !path.length) path = plan();
+    else path[0] = { x: robot.x, y: robot.y };
+    var remaining = path.length ? pathLength() : Math.hypot(goal.x - robot.x, goal.y - robot.y);
+    var pt = path.length ? pointAlong(Math.min(remaining, HORIZON * 0.9)) : goal;
+    if (!target.set) { target.x = pt.x; target.y = pt.y; target.set = true; }
+    var ease = Math.min(1, dt * 14);                 // glide the look-ahead point, no snapping
+    target.x += (pt.x - target.x) * ease; target.y += (pt.y - target.y) * ease;
+
+    mppi(remaining < HORIZON);
+    solveMs += (performance.now() - t0 - solveMs) * 0.08;
+
+    // drive: follow the first command of the plan
+    var ux = Ux[0], uy = Uy[0], um = Math.sqrt(ux * ux + uy * uy);
+    var limit = remaining < 2 ? 0 : Math.min(VMAX, VMAX * remaining / ARRIVE);
+    if (blockedAhead) limit = Math.min(limit, 90);
+    if (um > limit && um > 0) { ux *= limit / um; uy *= limit / um; }
+    var gain = Math.min(1, dt / TAU);
+    robot.vx += (ux - robot.vx) * gain; robot.vy += (uy - robot.vy) * gain;
+    robot.x = Math.max(2, Math.min(W - 2, robot.x + robot.vx * dt));
+    robot.y = Math.max(2, Math.min(H - 2, robot.y + robot.vy * dt));
+    if (robot.vx * robot.vx + robot.vy * robot.vy > 150) {         // nose follows the direction of travel
+      var turn = Math.atan2(robot.vy, robot.vx) - robot.th;
+      turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+      robot.th += turn * Math.min(1, dt * 12);
+    }
+
+    shiftAcc += dt;
+    while (shiftAcc >= DT) {
+      for (i = 0; i < T - 1; i++) { Ux[i] = Ux[i + 1]; Uy[i] = Uy[i + 1]; }
+      shiftAcc -= DT;
+    }
+
+    trail.push(robot.x, robot.y);
+    if (trail.length > 180) trail.splice(0, 2);
+    frameNo++;
+    if (frameNo % 12 === 0) {
+      if (hudMs) hudMs.textContent = solveMs.toFixed(2) + ' ms';
+      if (hudPath) hudPath.textContent = routeCells ? routeCells + ' cells' : 'line of sight';
+      canvas.setAttribute('data-frames', frameNo);
+      canvas.setAttribute('data-dist', Math.round(Math.hypot(robot.x - goal.x, robot.y - goal.y)));
+    }
+  }
+
+  /* ---- drawing ---- */
+  function draw() {
+    var i, k, t;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // route
+    if (path.length > 1) {
+      ctx.strokeStyle = MUTED; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+      ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+      for (i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // sampled futures, worst first so the cheapest sit on top
+    order.sort(function (a, b) { return costs[b] - costs[a]; });
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1;
+    for (i = 0; i < K; i++) {
+      k = order[i];
+      var n = hitAt[k]; if (n < 2) continue;
+      var q = i / (K - 1), base = k * (T + 1);
+      ctx.strokeStyle = palette[Math.round(q * (PAL - 1))];
+      ctx.globalAlpha = 0.07 + 0.5 * q * q * q;
+      ctx.beginPath(); ctx.moveTo(trajX[base], trajY[base]);
+      for (t = 1; t <= n; t++) ctx.lineTo(trajX[base + t], trajY[base + t]);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // where it has been
+    ctx.lineCap = 'butt';
+    for (i = 2; i < trail.length; i += 2) {
+      ctx.globalAlpha = 0.5 * (i / trail.length);
+      ctx.strokeStyle = HOT; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(trail[i - 2], trail[i - 1]); ctx.lineTo(trail[i], trail[i + 1]); ctx.stroke();
+    }
+    ctx.lineCap = 'round';
+
+    // the plan it committed to
+    if (nomN > 1) {
+      ctx.globalAlpha = 0.95; ctx.strokeStyle = INK; ctx.lineWidth = 1.75;
+      ctx.beginPath(); ctx.moveTo(nomX[0], nomY[0]);
+      for (t = 1; t <= nomN; t++) ctx.lineTo(nomX[t], nomY[t]);
+      ctx.stroke();
+    }
+
+    // moving obstacles
+    for (i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(140,148,163,0.07)';
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = MUTED; ctx.globalAlpha = 0.7; ctx.lineWidth = 1; ctx.stroke();
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.moveTo(c.x - 4, c.y); ctx.lineTo(c.x + 4, c.y); ctx.moveTo(c.x, c.y - 4); ctx.lineTo(c.x, c.y + 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + c.vx * 0.9, c.y + c.vy * 0.9); ctx.stroke();
+    }
+
+    // corner ticks on the text blocks: they are obstacles too
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = MUTED; ctx.lineWidth = 1;
+    for (i = 0; i < rects.length; i++) {
+      var r = rects[i], L = 7;
+      ctx.beginPath();
+      ctx.moveTo(r.x0, r.y0 + L); ctx.lineTo(r.x0, r.y0); ctx.lineTo(r.x0 + L, r.y0);
+      ctx.moveTo(r.x1 - L, r.y0); ctx.lineTo(r.x1, r.y0); ctx.lineTo(r.x1, r.y0 + L);
+      ctx.moveTo(r.x1, r.y1 - L); ctx.lineTo(r.x1, r.y1); ctx.lineTo(r.x1 - L, r.y1);
+      ctx.moveTo(r.x0 + L, r.y1); ctx.lineTo(r.x0, r.y1); ctx.lineTo(r.x0, r.y1 - L);
+      ctx.stroke();
+    }
+
+    // goal
+    ctx.globalAlpha = 1; ctx.strokeStyle = HOT; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(goal.x, goal.y, 9, 0, 6.2832);
+    ctx.moveTo(goal.x - 16, goal.y); ctx.lineTo(goal.x - 5, goal.y);
+    ctx.moveTo(goal.x + 5, goal.y); ctx.lineTo(goal.x + 16, goal.y);
+    ctx.moveTo(goal.x, goal.y - 16); ctx.lineTo(goal.x, goal.y - 5);
+    ctx.moveTo(goal.x, goal.y + 5); ctx.lineTo(goal.x, goal.y + 16);
+    ctx.stroke();
+
+    // robot
+    ctx.save();
+    ctx.translate(robot.x, robot.y); ctx.rotate(robot.th);
+    ctx.fillStyle = INK; ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-8, 7.5); ctx.lineTo(-4, 0); ctx.lineTo(-8, -7.5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = INK; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(robot.x, robot.y, R + 6, 0, 6.2832); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- input ---- */
+  function point(e) {
+    var r = canvas.getBoundingClientRect();
+    goal.x = Math.max(4, Math.min(W - 4, e.clientX - r.left));
+    goal.y = Math.max(4, Math.min(H - 4, e.clientY - r.top));
+    lastPointer = performance.now();
+    if (e.pointerType === 'touch') { pointerInside = false; holdUntil = lastPointer + 6000; }
+    else pointerInside = true;
+    path = [];                                       // replan on the very next frame
+  }
+  function release() { pointerInside = false; holdUntil = Math.max(holdUntil, performance.now() + 700); }
+  hero.addEventListener('pointermove', point);
+  hero.addEventListener('pointerdown', point);
+  hero.addEventListener('pointerenter', point);
+  hero.addEventListener('pointerleave', release);
+  hero.addEventListener('pointercancel', release);
+
+  /* ---- run ----
+     Driven by requestAnimationFrame, with a timer as a safety net for viewers
+     that throttle it. Nothing here waits on an observer to say the hero is visible. */
+  var last = performance.now(), lastTick = 0;
+  function inView() {
+    var r = hero.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight || 1e9;
+    return r.bottom > 0 && r.top < vh;
+  }
+  function tick() {
+    var now = performance.now();
+    if (document.hidden || !W || !inView()) { last = now; return; }
+    // reduced motion: nothing moves by itself, but the planner still answers the cursor
+    if (reduce && now - lastPointer > 5000) { last = now; return; }
+    var dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+    last = now; lastTick = now;
+    step(dt, now);
+    draw();
+  }
+  function loop() { requestAnimationFrame(loop); tick(); }
+
+  measure();
+  for (var warm = 0; warm < 90; warm++) step(1 / 60, -1e6 + warm * 16.7);   // first frame already mid-run
+  wanderAt = -1e9;
+  draw();
+
+  var relayout = function () { measure(); draw(); };
+  if (window.ResizeObserver) new ResizeObserver(relayout).observe(hero);
+  window.addEventListener('resize', relayout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+
+  requestAnimationFrame(loop);
+  setInterval(function () { if (performance.now() - lastTick > 100) tick(); }, 40);
+})();
+</script>
+</body>
+</html>
